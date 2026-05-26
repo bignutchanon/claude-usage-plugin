@@ -327,10 +327,27 @@ const state = {
   lastError: null,
 };
 
+function buildLoadingFrame() {
+  return [
+    line('5h:··% 7d:··%', {
+      templateImage: ANTHROPIC_ICON, color: COLOR.dim, font: FONT_BOLD, size: 12,
+    }),
+    '---',
+    mono(`${USER}@${HOSTNAME}:~# claude --stream`, COLOR.dim, 10),
+    mono('[~] connecting to /api/stream …', COLOR.warn, 11, true),
+    mono(`    target  : ${BASE}`, COLOR.ash, 10),
+  ].join('\n');
+}
+
 function emit() {
-  const frame = state.limits || state.usage
-    ? buildOnlineFrame(state)
-    : buildOfflineFrame(state.lastError);
+  let frame;
+  if (state.limits) {
+    frame = buildOnlineFrame(state);
+  } else if (state.lastError) {
+    frame = buildOfflineFrame(state.lastError);
+  } else {
+    frame = buildLoadingFrame();
+  }
   // SwiftBar's stream delimiter — must be on its own line.
   process.stdout.write(frame + '\n~~~\n');
 }
@@ -420,9 +437,8 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
 }
 
 (async () => {
-  // Emit a placeholder frame immediately so SwiftBar sees output within ms
-  // and doesn't think we're stuck. Otherwise it can spawn a second instance.
-  state.lastError = 'booting…';
+  // Emit a "loading" frame immediately so SwiftBar sees output within ms
+  // and doesn't display the previous run's stale state.
   emit();
   await fetchInitialSnapshot();
   emit();
