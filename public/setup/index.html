@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SETUP // claude-usage-plugin</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23070708'/%3E%3Crect x='2' y='6' width='12' height='4' fill='%2300ff41'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/vendor/fonts.css" />
+    <link rel="stylesheet" href="/setup/setup.css" />
+  </head>
+  <body>
+    <main class="wizard">
+      <header class="wizard-head">
+        <div class="prompt">root@claude-rig:~# ./setup --first-run</div>
+        <h1>FIRST-RUN SETUP</h1>
+        <p class="lede">
+          Connect this plugin to your <code>claude.ai</code> Max account.
+          Credentials are stored in the <strong>macOS Keychain</strong> — never
+          in plaintext on disk, never sent anywhere except <code>claude.ai</code>.
+        </p>
+      </header>
+
+      <ol class="steps">
+        <li>
+          <span class="num">01</span>
+          <div>
+            <h2>Open claude.ai in your browser</h2>
+            <p>
+              Sign in normally with your Anthropic account. Once you see the
+              chat UI, keep that tab open.
+            </p>
+            <a class="btn ghost" href="https://claude.ai" target="_blank" rel="noopener noreferrer">
+              ↗ open claude.ai
+            </a>
+          </div>
+        </li>
+
+        <li>
+          <span class="num">02</span>
+          <div>
+            <h2>Copy your sessionKey cookie</h2>
+            <p>
+              Open browser DevTools (Cmd+Option+I in Chrome/Safari) →
+              <kbd>Application</kbd> tab → <kbd>Cookies</kbd> →
+              <kbd>https://claude.ai</kbd>. Find the row named
+              <code>sessionKey</code> and copy its full value.
+            </p>
+            <pre class="cookie-demo">
+<span class="cookie-name">sessionKey</span>  <span class="cookie-val">sk-ant-sid01-…</span>  HttpOnly  Secure</pre>
+            <p class="hint">
+              ⚠ This cookie is equivalent to a password. Anyone with it can act
+              as you on claude.ai. Treat it accordingly.
+            </p>
+          </div>
+        </li>
+
+        <li>
+          <span class="num">03</span>
+          <div>
+            <h2>Find your org id</h2>
+            <p>
+              In the same DevTools panel, go to <kbd>Network</kbd>, click any
+              request to <code>/api/organizations/&lt;uuid&gt;/…</code>, and
+              copy the UUID. (Or just open any chat and look at the URL.)
+            </p>
+            <pre class="cookie-demo">
+<span class="cookie-name">orgId</span>     <span class="cookie-val">00000000-0000-0000-0000-000000000000</span></pre>
+          </div>
+        </li>
+
+        <li>
+          <span class="num">04</span>
+          <div>
+            <h2>Paste and verify</h2>
+            <form id="setupForm" autocomplete="off">
+              <label>
+                sessionKey
+                <textarea
+                  name="sessionKey"
+                  rows="3"
+                  spellcheck="false"
+                  placeholder="sk-ant-sid01-…"
+                  required
+                ></textarea>
+              </label>
+              <label>
+                orgId
+                <input
+                  name="orgId"
+                  spellcheck="false"
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  required
+                />
+              </label>
+
+              <details class="advanced">
+                <summary>advanced // fingerprint headers (optional)</summary>
+                <p class="hint">
+                  Some claude.ai endpoints reject requests missing these. Pull
+                  them from any <code>/api/organizations/…</code> request in
+                  DevTools → Network → Headers if the basic setup doesn't work.
+                </p>
+                <label>
+                  anthropic-client-sha
+                  <input name="clientSha" spellcheck="false" />
+                </label>
+                <label>
+                  anthropic-device-id
+                  <input name="deviceId" spellcheck="false" />
+                </label>
+                <label>
+                  anthropic-anonymous-id
+                  <input name="anonymousId" spellcheck="false" />
+                </label>
+              </details>
+
+              <button id="saveBtn" type="submit">verify &amp; save →</button>
+              <p id="status" class="status" hidden></p>
+            </form>
+          </div>
+        </li>
+      </ol>
+
+      <footer class="wizard-foot">
+        <p>
+          // credentials → macOS Keychain ·
+          server bound to <code>127.0.0.1</code> only ·
+          no telemetry ·
+          source: <a href="https://github.com/bignutchanon/claude-usage-plugin" target="_blank" rel="noopener noreferrer">github.com/bignutchanon/claude-usage-plugin</a>
+        </p>
+      </footer>
+    </main>
+    <script src="/setup/setup.js"></script>
+  </body>
+</html>

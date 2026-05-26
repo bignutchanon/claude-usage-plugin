@@ -5,9 +5,32 @@ const chokidar = require('chokidar');
 const { aggregate, PROJECTS_DIR } = require('./lib/parser');
 const { fetchMessagesUsage } = require('./lib/api-usage');
 const claudeAi = require('./lib/claude-ai');
+const keychain = require('./lib/keychain');
 
 const PORT = Number(process.env.PORT || 4000);
 const app = express();
+
+// JSON body parser for /api/setup/save (small payloads only — sessionKey is
+// long but well under 1 KB).
+app.use(express.json({ limit: '32kb' }));
+
+// Redirect dashboard root to /setup until credentials exist. Saves users
+// from seeing an empty broken dashboard on first launch.
+app.use((req, res, next) => {
+  const path = req.path;
+  const isSetupRoute =
+    path === '/setup' ||
+    path === '/setup/' ||
+    path.startsWith('/setup/') ||
+    path.startsWith('/api/setup') ||
+    path.startsWith('/vendor/') ||
+    path === '/styles.css' ||
+    path === '/favicon.ico';
+  if (!keychain.isConfigured() && path === '/' && !isSetupRoute) {
+    return res.redirect(302, '/setup');
+  }
+  next();
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -109,6 +132,77 @@ app.get('/api/usage/api', async (req, res) => {
   }
 });
 
+// ─── SETUP WIZARD ───────────────────────────────────────────────────────────
+// Status: shape that lets the wizard render correct state. NEVER returns the
+// sessionKey value itself — only "is it set, and where did it come from?".
+app.get('/api/setup/status', (_req, res) => {
+  const status = {};
+  for (const k of keychain.KEYS) status[k] = keychain.sourceOf(k);
+  res.json({
+    configured: keychain.isConfigured(),
+    items: status,
+    platform: process.platform,
+  });
+});
+
+// Validate + save. Body shape:
+//   { sessionKey, orgId, clientSha?, deviceId?, anonymousId?, clientVersion? }
+// First we call claude.ai with the proposed cookie. If it returns the org
+// successfully, we persist to Keychain. Otherwise we return a structured error
+// without writing anything.
+app.post('/api/setup/save', async (req, res) => {
+  const body = req.body || {};
+  const sessionKey = String(body.sessionKey || '').trim();
+  const orgId = String(body.orgId || '').trim();
+  if (!sessionKey || !orgId) {
+    return res.status(400).json({ error: 'sessionKey and orgId are required' });
+  }
+  // Defensive shape check on sessionKey — must look like an Anthropic cookie.
+  if (!/^sk-ant-sid\d{2}-/.test(sessionKey)) {
+    return res.status(400).json({
+      error: 'sessionKey doesn\'t look right — it should start with "sk-ant-sid01-" (copy from claude.ai cookies, full value)',
+    });
+  }
+  if (!/^[0-9a-f-]{20,}$/i.test(orgId)) {
+    return res.status(400).json({ error: 'orgId should be a UUID' });
+  }
+
+  const headers = {
+    clientSha: String(body.clientSha || '').trim(),
+    deviceId: String(body.deviceId || '').trim(),
+    anonymousId: String(body.anonymousId || '').trim(),
+  };
+
+  const check = await claudeAi.validateCredentials({ sessionKey, orgId, headers });
+  if (!check.ok) {
+    return res.status(401).json({ error: check.error });
+  }
+
+  // Validation succeeded — persist.
+  try {
+    keychain.set('sessionKey', sessionKey);
+    keychain.set('orgId', orgId);
+    if (headers.clientSha) keychain.set('clientSha', headers.clientSha);
+    if (headers.deviceId) keychain.set('deviceId', headers.deviceId);
+    if (headers.anonymousId) keychain.set('anonymousId', headers.anonymousId);
+    if (body.clientVersion) keychain.set('clientVersion', String(body.clientVersion).trim());
+  } catch (err) {
+    return res.status(500).json({ error: `failed to write Keychain: ${err.message}` });
+  }
+
+  // Kick off a refresh so the dashboard has data the moment the user lands.
+  refreshLimits().catch(() => {});
+
+  res.json({ ok: true, org: check.org });
+});
+
+// Forget all credentials (uninstall / "switch account").
+app.post('/api/setup/forget', (_req, res) => {
+  for (const k of keychain.KEYS) keychain.remove(k);
+  limitsCache = null;
+  res.json({ ok: true });
+});
+
 // SSE channel
 const clients = new Set();
 app.get('/api/stream', (req, res) => {
@@ -158,8 +252,12 @@ setInterval(() => broadcast('ping', { t: Date.now() }), 15_000);
 // Poll claude.ai/usage for real plan limit data
 setInterval(refreshLimits, LIMITS_POLL_MS);
 
-app.listen(PORT, () => {
-  console.log(`Claude Usage Monitor → http://localhost:${PORT}`);
+// Bind to 127.0.0.1 ONLY so nobody on the local network can read the
+// usage payload (which is sensitive — token counts, costs, session metadata).
+// Override with HOST=0.0.0.0 only if you know what you're doing.
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => {
+  console.log(`Claude Usage Monitor → http://${HOST}:${PORT}`);
   console.log(`Watching: ${PROJECTS_DIR}`);
   refreshLimits().catch((e) => console.error('initial limits fetch failed', e));
   rebuild().catch((e) => console.error('initial build failed', e));
