@@ -1,11 +1,16 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
 const express = require('express');
 const chokidar = require('chokidar');
 const { aggregate, PROJECTS_DIR } = require('./lib/parser');
 const { fetchMessagesUsage } = require('./lib/api-usage');
 const claudeAi = require('./lib/claude-ai');
 const keychain = require('./lib/keychain');
+
+const LOGIN_APP_PATH = path.join(__dirname, 'bin', 'ClaudeUsageLogin.app');
+const loginAppAvailable = fs.existsSync(LOGIN_APP_PATH);
 
 const PORT = Number(process.env.PORT || 4000);
 const app = express();
@@ -142,6 +147,7 @@ app.get('/api/setup/status', (_req, res) => {
     configured: keychain.isConfigured(),
     items: status,
     platform: process.platform,
+    loginAppAvailable,
   });
 });
 
@@ -201,6 +207,25 @@ app.post('/api/setup/forget', (_req, res) => {
   for (const k of keychain.KEYS) keychain.remove(k);
   limitsCache = null;
   res.json({ ok: true });
+});
+
+// Launch the native sign-in app (v3). Returns whether it was launched,
+// so the wizard can fall back to the manual paste flow if the .app isn't
+// built (Swift toolchain absent at install time).
+app.post('/api/setup/launch-login', (_req, res) => {
+  if (!loginAppAvailable) {
+    return res.status(404).json({
+      ok: false,
+      error: 'ClaudeUsageLogin.app is not built — run ./scripts/build-login.sh',
+    });
+  }
+  try {
+    // `open` returns immediately; the .app POSTs to /api/setup/save when done.
+    spawn('open', [LOGIN_APP_PATH], { detached: true, stdio: 'ignore' }).unref();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // SSE channel

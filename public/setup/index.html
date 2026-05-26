@@ -21,6 +21,22 @@
           Credentials are stored in the <strong>macOS Keychain</strong> — never
           in plaintext on disk, never sent anywhere except <code>claude.ai</code>.
         </p>
+
+        <!-- v3: native sign-in shortcut. Hidden if the .app isn't built. -->
+        <section id="quickSignin" class="quick-signin" hidden>
+          <div class="qs-headline">
+            <strong>Recommended</strong> — sign in like a normal app, skip the cookie copy
+          </div>
+          <button id="quickSigninBtn" type="button" class="btn solid">
+            ↗ Sign in with Claude
+          </button>
+          <p class="qs-hint">
+            Opens a small window with the claude.ai login page. We capture the
+            session cookie automatically once you sign in — no DevTools needed.
+            Or scroll down to paste it manually.
+          </p>
+          <p id="quickStatus" class="status" hidden></p>
+        </section>
       </header>
 
       <ol class="steps">

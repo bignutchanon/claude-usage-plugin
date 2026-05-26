@@ -85,6 +85,10 @@ sed \
 plutil -lint "$PLIST_PATH" >/dev/null || fail "generated plist failed plutil lint"
 hint "$PLIST_PATH"
 
+# ── build the native sign-in app (v3) — optional, falls back to manual paste
+step "Building one-click sign-in app (optional)…"
+"$REPO_DIR/scripts/build-login.sh" || warn "skipping native sign-in build; manual paste flow still works"
+
 # ── (re)load the LaunchAgent ─────────────────────────────────────────────────
 step "Bootstrapping LaunchAgent…"
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true

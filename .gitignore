@@ -26,6 +26,12 @@ build/
 .cache/
 *.tsbuildinfo
 
+# Swift / Xcode build outputs (v3 native sign-in app)
+swift-login/.build/
+swift-login/.swiftpm/
+swift-login/Package.resolved
+bin/
+
 # OS / shell history accidentally dropped in tree
 .zsh_history
 .bash_history

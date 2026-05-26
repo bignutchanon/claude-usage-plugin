@@ -5,6 +5,54 @@ const form = document.getElementById('setupForm');
 const btn = document.getElementById('saveBtn');
 const status = document.getElementById('status');
 
+// v3: native sign-in shortcut
+const quickPanel = document.getElementById('quickSignin');
+const quickBtn = document.getElementById('quickSigninBtn');
+const quickStatus = document.getElementById('quickStatus');
+
+(async function checkLoginApp() {
+  try {
+    const s = await fetch('/api/setup/status').then((r) => r.json());
+    if (s.loginAppAvailable) quickPanel.hidden = false;
+  } catch {}
+})();
+
+function setQuickStatus(text, kind) {
+  quickStatus.hidden = !text;
+  quickStatus.textContent = text || '';
+  quickStatus.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+let pollHandle = null;
+function startPolling() {
+  if (pollHandle) clearInterval(pollHandle);
+  pollHandle = setInterval(async () => {
+    try {
+      const s = await fetch('/api/setup/status').then((r) => r.json());
+      if (s.configured) {
+        clearInterval(pollHandle);
+        setQuickStatus('[+] Connected. Redirecting to dashboard…', 'ok');
+        setTimeout(() => { window.location.href = '/'; }, 800);
+      }
+    } catch {}
+  }, 1500);
+}
+
+quickBtn.addEventListener('click', async () => {
+  setQuickStatus('Launching sign-in window…', 'busy');
+  quickBtn.disabled = true;
+  try {
+    const r = await fetch('/api/setup/launch-login', { method: 'POST' });
+    const body = await r.json();
+    if (!r.ok || !body.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    setQuickStatus('Sign in to claude.ai in the window that just opened. We\'ll detect when you\'re done.', 'busy');
+    startPolling();
+  } catch (err) {
+    quickBtn.disabled = false;
+    setQuickStatus(`couldn't launch sign-in app: ${err.message}`, 'error');
+  }
+});
+
 function setStatus(text, kind) {
   status.hidden = !text;
   status.textContent = text || '';

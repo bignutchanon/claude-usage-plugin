@@ -46,12 +46,18 @@ This will:
 3. Point SwiftBar at this repo's `menubar/` folder
 4. Open the dashboard at <http://127.0.0.1:4000>
 
-The first time you open the dashboard you'll be redirected to **`/setup`** —
-follow the 4-step wizard there. You'll need to paste your `sessionKey` cookie
-from `claude.ai` once; after that, it's in your Keychain and you never see it
-again.
+The first time you open the dashboard you'll be redirected to **`/setup`**.
 
-## How to get your `sessionKey`
+If you have Xcode Command Line Tools installed (most macOS developers do),
+the installer also builds a native **"Sign in with Claude"** app — click the
+button at the top of the wizard, sign in to `claude.ai` normally in the small
+window that opens, and we grab the session cookie for you. **No DevTools, no
+cookie pasting.**
+
+If the native app isn't available (e.g. Swift toolchain missing), the wizard
+falls back to a manual paste flow described below.
+
+## How to get your `sessionKey` (manual fallback)
 
 1. Open <https://claude.ai> in your browser and sign in.
 2. Open DevTools (Cmd + Option + I).

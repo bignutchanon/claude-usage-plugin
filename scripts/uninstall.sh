@@ -27,6 +27,18 @@ for key in sessionKey orgId clientSha deviceId anonymousId clientVersion; do
     echo "▶ forgot Keychain entry: $key" || true
 done
 
+# Native sign-in app + Swift build artifacts (v3).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -d "$REPO_DIR/bin/ClaudeUsageLogin.app" ]; then
+  echo "▶ removing $REPO_DIR/bin/ClaudeUsageLogin.app"
+  rm -rf "$REPO_DIR/bin/ClaudeUsageLogin.app"
+fi
+if [ -d "$REPO_DIR/swift-login/.build" ]; then
+  echo "▶ removing Swift build cache"
+  rm -rf "$REPO_DIR/swift-login/.build"
+fi
+
 echo
 echo "✓ uninstall complete."
 echo "  the repo and node_modules are untouched — delete the folder manually if you want."
