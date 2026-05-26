@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 
-// SwiftBar streamable plugin — Claude usage menu-bar widget.
-//
-// Subscribes to the dashboard's SSE channel (/api/stream) so the widget
-// updates the *instant* the dashboard does. No polling, no drift between
-// widget and dashboard.
-//
-// SwiftBar reads stdout and replaces the menu on every "~~~" delimiter line.
+// SwiftBar plugin — Claude usage menu-bar widget. HACKER / phosphor terminal.
+// Refresh interval is set by the wrapper filename: claude-usage.5s.sh
 
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const BASE = process.env.CLAUDE_MONITOR_BASE || 'http://localhost:4000';
@@ -18,22 +13,25 @@ const USER = 'root';
 const UID = process.getuid?.() ?? 501;
 const LAUNCHD_TARGET = `gui/${UID}/${LAUNCHD_LABEL}`;
 
-const TICK_MS = 5_000;          // re-render every 5s for countdown ticking
-const RECONNECT_MS = 2_000;     // SSE reconnect backoff
-const INIT_TIMEOUT_MS = 8_000;  // initial fetch timeout
-
 const COLOR = {
-  ok: '#00ff41', warn: '#ff9500', bad: '#ff003c',
-  dim: '#2d6b2d', ash: '#6fa66f', bone: '#9eff9e', cyan: '#00e0ff',
+  ok: '#00ff41',     // matrix green
+  warn: '#ff9500',   // amber
+  bad: '#ff003c',    // matrix red
+  dim: '#2d6b2d',    // dark phosphor
+  ash: '#6fa66f',    // pale phosphor
+  bone: '#9eff9e',   // bright phosphor
+  cyan: '#00e0ff',   // accent for prompts / sections
 };
+
 const FONT = 'JetBrainsMono-Regular,Menlo';
 const FONT_BOLD = 'JetBrainsMono-Bold,Menlo-Bold';
+
+// 20x20 monochrome Anthropic-style sunburst, base64 PNG (template image).
 const ANTHROPIC_ICON =
   'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAYUlEQVR42rWUwQ4AIAhC/f+fpquXIDTcOrS1N8SkShfaGRcEEC6sA9TdgjLgqk247UMogVBuQ+HCGFjBn5TdzAfxGkwRg8v3E0g5Xq49jEw59g+/bUpkl+Np8y0PI4k9rgOFf7NN5z/SkgAAAABJRU5ErkJggg==';
 
 // ── PRIMITIVES ───────────────────────────────────────────────────────────────
 const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function severityColor(pct) {
   if (pct == null || Number.isNaN(pct)) return COLOR.dim;
@@ -104,7 +102,9 @@ async function getJSON(url, timeoutMs) {
   }
 }
 
-// ── LINE BUILDERS ────────────────────────────────────────────────────────────
+// ── SWIFTBAR LINE BUILDERS ───────────────────────────────────────────────────
+// Imperative builder: ~3x cheaper than Object.entries+filter+map+join for the
+// ~40 calls per plugin tick, and easier to scan.
 function line(text, attrs) {
   if (!attrs) return text;
   let out = text;
@@ -118,18 +118,35 @@ function line(text, attrs) {
   return out;
 }
 
+// Standard mono line: text + (color, size, bold, extras).
 function mono(text, color, size, bold, extras) {
   const attrs = { color, size, font: bold ? FONT_BOLD : FONT };
   if (extras) Object.assign(attrs, extras);
   return line(text, attrs);
 }
 
+// Submenu item (SwiftBar's `--` prefix).
 const sub = (text, attrs) => '--' + line(text, attrs);
 
+// Launchctl command attrs (shared by EXEC and OFFLINE sections).
 const launchctlAttrs = (signal) =>
   signal === 'kill'
-    ? { bash: 'launchctl', param1: 'kill', param2: 'TERM', param3: LAUNCHD_TARGET, terminal: 'false', refresh: 'true' }
-    : { bash: 'launchctl', param1: 'kickstart', param2: '-k', param3: LAUNCHD_TARGET, terminal: 'false', refresh: 'true' };
+    ? {
+        bash: 'launchctl',
+        param1: 'kill',
+        param2: 'TERM',
+        param3: LAUNCHD_TARGET,
+        terminal: 'false',
+        refresh: 'true',
+      }
+    : {
+        bash: 'launchctl',
+        param1: 'kickstart',
+        param2: '-k',
+        param3: LAUNCHD_TARGET,
+        terminal: 'false',
+        refresh: 'true',
+      };
 
 const tailLogAttrs = {
   shell: 'osascript',
@@ -138,7 +155,7 @@ const tailLogAttrs = {
   terminal: 'false',
 };
 
-// ── RENDER (pure functions of state) ─────────────────────────────────────────
+// ── RENDER ───────────────────────────────────────────────────────────────────
 function topbar(limits) {
   const fh = pickPct(limits?.five_hour);
   const sd = pickPct(limits?.seven_day);
@@ -147,21 +164,27 @@ function topbar(limits) {
   const fhTxt = fh == null ? '--' : pad2(Math.round(fh));
   const sdTxt = sd == null ? '--' : pad2(Math.round(sd));
   return line(`5h:${fhTxt}% 7d:${sdTxt}%`, {
-    templateImage: ANTHROPIC_ICON, color, font: FONT_BOLD, size: 12,
+    templateImage: ANTHROPIC_ICON,
+    color,
+    font: FONT_BOLD,
+    size: 12,
   });
 }
 
-const sectionHead = (num, name) =>
-  mono(`[${num}] >> ${name}`, COLOR.cyan, 11, true);
+function sectionHead(num, name) {
+  return mono(`[${num}] >> ${name}`, COLOR.cyan, 11, true);
+}
 
-function renderBanner(limits, connected) {
-  let mark, text, color;
-  if (!connected) { mark = '[~]'; text = 'STREAM RECONNECTING'; color = COLOR.warn; }
-  else if (limits?.error) { mark = '[!]'; text = 'LINK DEGRADED'; color = COLOR.warn; }
-  else { mark = '[+]'; text = 'LINK ESTABLISHED'; color = COLOR.ok; }
+function renderBanner(limits) {
+  const ok = !limits?.error;
   return [
-    mono(`${USER}@${HOSTNAME}:~# claude --stream`, COLOR.dim, 10),
-    mono(`${mark} ${text}`, color, 11, true),
+    mono(`${USER}@${HOSTNAME}:~# claude --status`, COLOR.dim, 10),
+    mono(
+      ok ? '[+] LINK ESTABLISHED' : '[!] LINK DEGRADED',
+      ok ? COLOR.ok : COLOR.warn,
+      11,
+      true,
+    ),
     mono('    target  : nuthappy2549@gmail.com', COLOR.ash, 10),
     mono('    host    : claude.ai', COLOR.ash, 10),
     mono('    tier    : default_claude_max_5x', COLOR.ash, 10),
@@ -186,7 +209,8 @@ function renderSubTier(name, tier) {
   if (pct == null) return null;
   return mono(
     `    └─ ${name.padEnd(7)} [${crtBar(pct, 10)}] ${String(Math.round(pct)).padStart(3)}%`,
-    severityColor(pct), 10,
+    severityColor(pct),
+    10,
   );
 }
 
@@ -204,7 +228,9 @@ function renderPayloadLog(usage) {
   return rows.map(([k, v, accent]) =>
     mono(
       `    ${('$ ' + k).padEnd(14)} ${v.padStart(12)}`,
-      accent ? COLOR.bone : COLOR.ash, 11, accent,
+      accent ? COLOR.bone : COLOR.ash,
+      11,
+      accent,
     ),
   );
 }
@@ -223,7 +249,8 @@ function renderProcStats(usage) {
     const name = e.model.replace(/^claude-/, '').slice(0, 18).padEnd(18);
     return mono(
       `    [${i}] ${name} [${crtBar(pct, 10)}] ${fmtMoney(e.cost).padStart(8)}`,
-      severityColor(pct), 10,
+      severityColor(pct),
+      10,
     );
   });
 }
@@ -231,15 +258,21 @@ function renderProcStats(usage) {
 function renderExec(limits) {
   const out = [
     mono('  $ open dashboard', COLOR.bone, 11, true, {
-      href: BASE, sfimage: 'arrow.up.right.square.fill',
+      href: BASE,
+      sfimage: 'arrow.up.right.square.fill',
     }),
     mono('  $ refresh --now', COLOR.bone, 11, true, {
-      refresh: 'true', sfimage: 'arrow.clockwise',
+      refresh: 'true',
+      sfimage: 'arrow.clockwise',
     }),
     mono('  $ service --ctl', COLOR.bone, 11, true, { sfimage: 'gearshape.fill' }),
     sub('tail -f log', tailLogAttrs),
     sub('open log in Console.app', {
-      shell: 'open', param1: '-a', param2: 'Console', param3: SERVER_LOG, terminal: 'false',
+      shell: 'open',
+      param1: '-a',
+      param2: 'Console',
+      param3: SERVER_LOG,
+      terminal: 'false',
     }),
     sub('systemctl restart claude-usage', launchctlAttrs('restart')),
     sub('kill -TERM daemon', launchctlAttrs('kill')),
@@ -249,17 +282,67 @@ function renderExec(limits) {
   return out;
 }
 
-function buildOnlineFrame(state) {
-  const { limits, usage, connected, lastEventAt } = state;
+// ── OFFLINE / ERROR FALLBACKS ────────────────────────────────────────────────
+function renderOffline(err) {
+  const out = [
+    line('OFFLINE', {
+      sfimage: 'bolt.slash.fill',
+      color: COLOR.bad,
+      font: FONT_BOLD,
+      size: 13,
+    }),
+    '---',
+    mono(`${USER}@${HOSTNAME}:~# claude --status`, COLOR.dim, 10),
+    mono('[!] CONNECTION REFUSED', COLOR.bad, 12, true),
+    mono('    daemon  : down', COLOR.ash, 10),
+    mono(`    target  : ${BASE}`, COLOR.ash, 10),
+  ];
+  if (err) out.push(mono(`    error   : ${err}`, COLOR.ash, 10));
+  out.push(
+    '---',
+    sectionHead('00', 'RECOVERY'),
+    mono('  $ systemctl start claude-usage', COLOR.bone, 11, true, {
+      ...launchctlAttrs('restart'),
+      sfimage: 'play.fill',
+    }),
+    mono('  $ tail -f log', COLOR.bone, 11, true, {
+      ...tailLogAttrs,
+      sfimage: 'doc.text.magnifyingglass',
+    }),
+    mono('  $ cd ~/Projects/claude-usage-monitor', COLOR.bone, 11, true, {
+      href: `file://${PROJECT_DIR}`,
+      sfimage: 'folder.fill',
+    }),
+    mono('  $ refresh', COLOR.bone, 11, true, {
+      refresh: 'true',
+      sfimage: 'arrow.clockwise',
+    }),
+  );
+  console.log(out.join('\n'));
+}
+
+// ── MAIN ─────────────────────────────────────────────────────────────────────
+async function main() {
+  let limits, usage;
+  try {
+    [limits, usage] = await Promise.all([
+      getJSON(`${BASE}/api/limits`, 4000),
+      getJSON(`${BASE}/api/usage/local`, 12000).catch(() => null),
+    ]);
+  } catch (err) {
+    return renderOffline(err.message);
+  }
+
   const out = [
     topbar(limits),
     '---',
-    ...renderBanner(limits, connected),
+    ...renderBanner(limits),
     '---',
     sectionHead('01', 'RATE_LIMITS'),
     ...renderLimitBlock('5H_WINDOW', limits?.five_hour),
     ...renderLimitBlock('7D_WINDOW', limits?.seven_day),
   ];
+
   const opus = renderSubTier('opus', limits?.seven_day_opus);
   if (opus) out.push(opus);
   const sonnet = renderSubTier('sonnet', limits?.seven_day_sonnet);
@@ -278,174 +361,22 @@ function buildOnlineFrame(state) {
 
   out.push('---', sectionHead('04', 'EXEC'), ...renderExec(limits));
 
-  const ev = lastEventAt ? fmtClock(lastEventAt) : '--:--:--';
+  const ping = limits?.fetchedAt ? fmtClock(limits.fetchedAt) : '--:--:--';
   out.push(
     '---',
-    mono(`// last_event=${ev}  mode=stream/sse`, COLOR.dim, 9),
+    mono(`// last_ping=${ping}  poll=5s`, COLOR.dim, 9),
     mono(`// ${USER}@${HOSTNAME} :: ${fmtClock()}`, COLOR.dim, 9),
   );
-  return out.join('\n');
+
+  console.log(out.join('\n'));
 }
 
-function buildOfflineFrame(err) {
-  const out = [
-    line('OFFLINE', {
-      sfimage: 'bolt.slash.fill', color: COLOR.bad, font: FONT_BOLD, size: 13,
-    }),
-    '---',
-    mono(`${USER}@${HOSTNAME}:~# claude --stream`, COLOR.dim, 10),
-    mono('[!] CONNECTION REFUSED', COLOR.bad, 12, true),
-    mono('    daemon  : down', COLOR.ash, 10),
-    mono(`    target  : ${BASE}`, COLOR.ash, 10),
-  ];
-  if (err) out.push(mono(`    error   : ${err}`, COLOR.ash, 10));
-  out.push(
-    '---',
-    sectionHead('00', 'RECOVERY'),
-    mono('  $ systemctl start claude-usage', COLOR.bone, 11, true, {
-      ...launchctlAttrs('restart'), sfimage: 'play.fill',
-    }),
-    mono('  $ tail -f log', COLOR.bone, 11, true, {
-      ...tailLogAttrs, sfimage: 'doc.text.magnifyingglass',
-    }),
-    mono('  $ cd ~/Projects/claude-usage-monitor', COLOR.bone, 11, true, {
-      href: `file://${PROJECT_DIR}`, sfimage: 'folder.fill',
-    }),
-    mono('  $ refresh', COLOR.bone, 11, true, {
-      refresh: 'true', sfimage: 'arrow.clockwise',
-    }),
+main().catch((err) => {
+  console.log(
+    line('ERR', { sfimage: 'bolt.slash.fill', color: COLOR.bad, font: FONT_BOLD, size: 13 }),
   );
-  return out.join('\n');
-}
-
-// ── STREAM ENGINE ────────────────────────────────────────────────────────────
-const state = {
-  limits: null,
-  usage: null,
-  connected: false,
-  lastEventAt: null,
-  lastError: null,
-};
-
-function buildLoadingFrame() {
-  return [
-    line('5h:··% 7d:··%', {
-      templateImage: ANTHROPIC_ICON, color: COLOR.dim, font: FONT_BOLD, size: 12,
-    }),
-    '---',
-    mono(`${USER}@${HOSTNAME}:~# claude --stream`, COLOR.dim, 10),
-    mono('[~] connecting to /api/stream …', COLOR.warn, 11, true),
-    mono(`    target  : ${BASE}`, COLOR.ash, 10),
-  ].join('\n');
-}
-
-function emit() {
-  let frame;
-  if (state.limits) {
-    frame = buildOnlineFrame(state);
-  } else if (state.lastError) {
-    frame = buildOfflineFrame(state.lastError);
-  } else {
-    frame = buildLoadingFrame();
-  }
-  // SwiftBar's stream delimiter — must be on its own line.
-  process.stdout.write(frame + '\n~~~\n');
-}
-
-async function fetchInitialSnapshot() {
-  try {
-    const [limits, usage] = await Promise.all([
-      getJSON(`${BASE}/api/limits`, INIT_TIMEOUT_MS),
-      getJSON(`${BASE}/api/usage/local`, INIT_TIMEOUT_MS).catch(() => null),
-    ]);
-    state.limits = limits;
-    state.usage = usage;
-    state.lastEventAt = Date.now();
-    state.lastError = null;
-    return true;
-  } catch (err) {
-    state.lastError = err.message;
-    return false;
-  }
-}
-
-function parseSSEMessage(msg) {
-  // Each event is "event: <name>\ndata: <json>".  Lines may also start with
-  // "retry:" or ":" (comment) — ignore those.
-  let event = 'message';
-  let dataStr = '';
-  for (const ln of msg.split('\n')) {
-    if (ln.startsWith('event: ')) event = ln.slice(7).trim();
-    else if (ln.startsWith('data: ')) dataStr += ln.slice(6);
-  }
-  if (!dataStr) return null;
-  try {
-    return { event, data: JSON.parse(dataStr) };
-  } catch {
-    return null;
-  }
-}
-
-async function streamLoop() {
-  while (true) {
-    let res;
-    try {
-      res = await fetch(`${BASE}/api/stream`, { signal: AbortSignal.timeout(10_000) });
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-      state.connected = true;
-      state.lastError = null;
-      emit();
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf('\n\n')) >= 0) {
-          const msg = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          const parsed = parseSSEMessage(msg);
-          if (!parsed) continue;
-          state.lastEventAt = Date.now();
-          if (parsed.event === 'limits') { state.limits = parsed.data; emit(); }
-          else if (parsed.event === 'usage') { state.usage = parsed.data; emit(); }
-          // 'ping' events bump lastEventAt only — no re-render needed (the
-          // tick timer handles countdown ticking).
-        }
-      }
-    } catch (err) {
-      state.lastError = err.message;
-    }
-    // disconnected
-    state.connected = false;
-    emit();
-    await sleep(RECONNECT_MS);
-  }
-}
-
-function tickLoop() {
-  // Keep countdowns + clock fresh even when no SSE event arrives.
-  setInterval(emit, TICK_MS).unref?.();
-}
-
-// Graceful shutdown so SwiftBar's process recycling stays clean.
-for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-  process.on(sig, () => process.exit(0));
-}
-
-(async () => {
-  // Emit a "loading" frame immediately so SwiftBar sees output within ms
-  // and doesn't display the previous run's stale state.
-  emit();
-  await fetchInitialSnapshot();
-  emit();
-  tickLoop();
-  await streamLoop();
-})().catch((err) => {
-  state.lastError = String(err.message || err);
-  emit();
-  process.exit(1);
+  console.log('---');
+  console.log(mono('[!] kernel panic', COLOR.bad, 12, true));
+  console.log(mono(`    ${String(err.message || err)}`, COLOR.ash, 10));
+  console.log(mono('  $ refresh', COLOR.bone, 11, true, { refresh: 'true' }));
 });
