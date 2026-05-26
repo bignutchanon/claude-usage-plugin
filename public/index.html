@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BLACKLIST // CASE 52E99C7C</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23070708'/%3E%3Crect x='2' y='6' width='12' height='4' fill='%23e8341c'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&family=Big+Shoulders+Display:wght@500;700;900&family=Special+Elite&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  </head>
+  <body class="dossier">
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <main class="case">
+      <!-- ================ HEADER STRIP ================ -->
+      <header class="case-header">
+        <div class="case-strip">
+          <span class="strip-item"><span class="strip-key">FILE №</span><span class="strip-val">52E99C7C·0701·4B33</span></span>
+          <span class="strip-sep">▮</span>
+          <span class="strip-item"><span class="strip-key">OPENED</span><span class="strip-val" id="datelineDate">—</span></span>
+          <span class="strip-sep">▮</span>
+          <span class="strip-item"><span class="strip-key">STATUS</span><span class="strip-val live"><span class="live-dot" id="liveDot"></span><span id="liveLabel">SURVEILLING</span></span></span>
+          <span class="strip-sep">▮</span>
+          <span class="strip-item"><span class="strip-key">LAST PING</span><span class="strip-val" id="generatedAt">—</span></span>
+          <span class="strip-spacer"></span>
+          <button id="refreshBtn" class="refresh-btn">↻ POLL</button>
+        </div>
+
+        <div class="tape" aria-hidden="true">
+          <span>CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION · CAUTION ·</span>
+        </div>
+
+        <div class="case-title">
+          <div class="title-meta">
+            <div class="meta-row">
+              <span class="meta-key">SUBJECT</span>
+              <span class="meta-val redact">nuthappy2549@gmail.com</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">CLASSIFICATION</span>
+              <span class="meta-val accent">MAX-TIER · 5×</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">ALIAS</span>
+              <span class="meta-val">CLAUDE.AI/ORG</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-key">ASSET</span>
+              <span class="meta-val">CLAUDE-OPUS-4-7</span>
+            </div>
+          </div>
+
+          <h1 class="wanted">
+            <span class="wanted-row">MOST</span>
+            <span class="wanted-row accent">WATCHED</span>
+          </h1>
+
+          <div class="stamp-classified" aria-hidden="true">CLASSIFIED</div>
+        </div>
+
+        <p class="brief">
+          <span class="brief-label">// BRIEF</span>
+          Continuous telemetry on subject's interaction with the asset across all
+          observed sessions. Plan-utilization figures intercepted from
+          <code>claude.ai/api</code>. Token ledger reconstructed from
+          <code>~/.claude/projects</code>. Refreshed every 30 seconds.
+        </p>
+      </header>
+
+      <!-- ================ THREAT LEVELS ================ -->
+      <section class="threat-section">
+        <h2 class="section-title">
+          <span class="num">§ 01</span>
+          <span class="text">THREAT LEVEL</span>
+          <span class="dash"></span>
+        </h2>
+
+        <div class="threat-grid">
+          <article class="threat" id="fiveHourCard">
+            <header class="threat-head">
+              <span class="threat-kicker">↳ 5-HOUR WINDOW</span>
+              <span class="threat-sub" id="fiveHourTier">SOURCE: CLAUDE.AI/API</span>
+            </header>
+            <div class="threat-display">
+              <span class="threat-pct" id="fiveHourPct">—</span>
+              <span class="threat-pct-mark">%</span>
+            </div>
+            <div class="threat-meter">
+              <div class="meter-rail">
+                <div class="meter-fill" id="fiveHourFill"></div>
+                <div class="meter-grid" aria-hidden="true"></div>
+              </div>
+              <div class="meter-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+            </div>
+            <p class="threat-reset" id="fiveHourReset">—</p>
+            <div class="threat-detail">
+              <span class="detail-label">// INTERCEPTS, THIS WINDOW</span>
+              <div class="detail-row">
+                <span><strong id="fiveHourReq">—</strong><em>REQ</em></span>
+                <span><strong id="fiveHourOut">—</strong><em>OUT</em></span>
+                <span><strong id="fiveHourIn">—</strong><em>IN</em></span>
+                <span><strong id="fiveHourCache">—</strong><em>CACHE R/W</em></span>
+              </div>
+              <div class="model-row" id="fiveHourModels"></div>
+            </div>
+          </article>
+
+          <article class="threat" id="sevenDayCard">
+            <header class="threat-head">
+              <span class="threat-kicker">↳ 7-DAY WINDOW</span>
+              <span class="threat-sub">SOURCE: CLAUDE.AI/API</span>
+            </header>
+            <div class="threat-display">
+              <span class="threat-pct" id="sevenDayPct">—</span>
+              <span class="threat-pct-mark">%</span>
+            </div>
+            <div class="threat-meter">
+              <div class="meter-rail">
+                <div class="meter-fill" id="sevenDayFill"></div>
+                <div class="meter-grid" aria-hidden="true"></div>
+              </div>
+              <div class="meter-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+            </div>
+            <p class="threat-reset" id="sevenDayReset">—</p>
+            <div class="sub-tiers" id="subTiers"></div>
+            <div class="threat-detail">
+              <span class="detail-label">// INTERCEPTS, THIS WINDOW</span>
+              <div class="detail-row">
+                <span><strong id="sevenDayReq">—</strong><em>REQ</em></span>
+                <span><strong id="sevenDayOut">—</strong><em>OUT</em></span>
+                <span><strong id="sevenDayIn">—</strong><em>IN</em></span>
+                <span><strong id="sevenDayCache">—</strong><em>CACHE R/W</em></span>
+              </div>
+              <div class="model-row" id="sevenDayModels"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================ INTAKE LEDGER ================ -->
+      <section class="ledger-section">
+        <h2 class="section-title">
+          <span class="num">§ 02</span>
+          <span class="text">INTAKE LEDGER</span>
+          <span class="dash"></span>
+          <span class="meta-tag">ALL-TIME</span>
+        </h2>
+
+        <div class="ledger-grid">
+          <div class="ledger-cell">
+            <div class="ledger-num" id="kpiCost">—</div>
+            <div class="ledger-label">TOTAL COST</div>
+            <div class="ledger-foot" id="kpiRequests">— REQUESTS</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-num" id="kpiInput">—</div>
+            <div class="ledger-label">INPUT TOKENS</div>
+            <div class="ledger-foot">EXCL. CACHE</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-num" id="kpiOutput">—</div>
+            <div class="ledger-label">OUTPUT TOKENS</div>
+            <div class="ledger-foot">GENERATED</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-num" id="kpiCache">—</div>
+            <div class="ledger-label">CACHE R / W</div>
+            <div class="ledger-foot" id="kpiCacheHit">HIT —</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================ EVIDENCE / CHARTS ================ -->
+      <section class="evidence-section">
+        <h2 class="section-title">
+          <span class="num">§ 03</span>
+          <span class="text">EVIDENCE</span>
+          <span class="dash"></span>
+        </h2>
+        <div class="evidence-grid">
+          <figure class="evidence-figure">
+            <figcaption>
+              <span class="evidence-kicker">EXHIBIT A</span>
+              <h3>DAILY COST · 30-DAY TRACE</h3>
+            </figcaption>
+            <div class="chart-canvas-wrap">
+              <canvas id="dailyChart"></canvas>
+            </div>
+          </figure>
+          <figure class="evidence-figure">
+            <figcaption>
+              <span class="evidence-kicker">EXHIBIT B</span>
+              <h3>ASSET BREAKDOWN · COST SHARE</h3>
+            </figcaption>
+            <div class="chart-canvas-wrap">
+              <canvas id="modelChart"></canvas>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ================ DOCKETS / TABLES ================ -->
+      <section class="docket-section">
+        <h2 class="section-title">
+          <span class="num">§ 04</span>
+          <span class="text">DOCKETS</span>
+          <span class="dash"></span>
+        </h2>
+        <div class="docket-grid">
+          <div class="docket-block">
+            <h3 class="docket-title">FREQUENT TARGETS</h3>
+            <table id="projectsTable" class="dossier-table">
+              <thead>
+                <tr><th>// PROJECT</th><th class="num">REQ</th><th class="num">TOK</th><th class="num">COST</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="docket-block">
+            <h3 class="docket-title">SURVEILLANCE LOG</h3>
+            <table id="sessionsTable" class="dossier-table">
+              <thead>
+                <tr><th>// LAST SEEN</th><th>PROJECT</th><th class="num">REQ</th><th class="num">COST</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================ WIRETAP / LIVE FEED ================ -->
+      <section class="wire-section">
+        <h2 class="section-title">
+          <span class="num">§ 05</span>
+          <span class="text">WIRETAP</span>
+          <span class="dash"></span>
+          <span class="rec-indicator"><span class="rec-dot"></span> REC</span>
+        </h2>
+        <table id="recentTable" class="dossier-table wire-table">
+          <thead>
+            <tr>
+              <th>// TIMESTAMP</th>
+              <th>ASSET</th>
+              <th>PROJECT</th>
+              <th class="num">IN</th>
+              <th class="num">OUT</th>
+              <th class="num">CACHE R</th>
+              <th class="num">COST</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- ================ OPTIONAL ANNEXES ================ -->
+      <section class="annex" id="claudeAiPanel" hidden>
+        <h2 class="section-title">
+          <span class="num">§ ANNEX-A</span>
+          <span class="text">CLAUDE.AI RAW</span>
+          <span class="dash"></span>
+        </h2>
+        <p class="panel-status" id="claudeAiStatus">—</p>
+        <div id="claudeAiSummary"></div>
+        <details>
+          <summary>OPEN RAW INTERCEPT</summary>
+          <pre id="claudeAiRaw" class="raw"></pre>
+        </details>
+      </section>
+
+      <section class="annex" id="apiPanel" hidden>
+        <h2 class="section-title">
+          <span class="num">§ ANNEX-B</span>
+          <span class="text">ORG-WIDE API</span>
+          <span class="dash"></span>
+        </h2>
+        <p class="panel-status" id="apiStatus">—</p>
+        <pre id="apiRaw" class="raw"></pre>
+      </section>
+
+      <footer class="footer-stamp">
+        <span class="stamp-row">EYES ONLY · INTERNAL · DO NOT DISTRIBUTE</span>
+        <span class="stamp-row meta">
+          Set in <em>Saira Stencil One</em>, <em>Big Shoulders Display</em>,
+          <em>Special Elite</em> &amp; <em>JetBrains Mono</em>.
+        </span>
+      </footer>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
