@@ -26,6 +26,10 @@ async function rebuild() {
   cache = data;
   cacheBuiltAt = Date.now();
   broadcast('usage', cache);
+  // Parsing 192 JSONL files churns through tens of MB of intermediate objects.
+  // V8 grows the heap to fit the peak but doesn't shrink it back on its own,
+  // so RSS climbs over time. With --expose-gc we can reclaim immediately.
+  if (typeof global.gc === 'function') global.gc();
   return cache;
 }
 
