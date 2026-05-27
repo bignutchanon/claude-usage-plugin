@@ -8,6 +8,7 @@ const { aggregate, PROJECTS_DIR } = require('./lib/parser');
 const { fetchMessagesUsage } = require('./lib/api-usage');
 const claudeAi = require('./lib/claude-ai');
 const keychain = require('./lib/keychain');
+const slack = require('./lib/slack');
 
 const LOGIN_APP_PATH = path.join(__dirname, 'bin', 'ClaudeUsageLogin.app');
 const loginAppAvailable = fs.existsSync(LOGIN_APP_PATH);
@@ -48,6 +49,9 @@ let limitsCache = null;
 let limitsCheckedAt = 0;
 const LIMITS_POLL_MS = 30_000;
 
+// Slack notification state
+let lastDailySummaryDate = null;
+
 async function rebuild() {
   const data = await aggregate();
   if (limitsCache) data.planLimits = limitsCache;
@@ -74,15 +78,109 @@ async function refreshLimits() {
         cache.planLimits = limitsCache;
         broadcast('limits', limitsCache);
       }
+
+      // Check for Slack threshold alerts
+      if (slack.isConfigured() && result.data.daily_usage) {
+        checkSlackThresholdAlerts(result.data);
+      }
     } else if (result.error) {
       limitsCache = { source: 'claude.ai', error: result.error, fetchedAt: Date.now() };
       if (cache) cache.planLimits = limitsCache;
       broadcast('limits', limitsCache);
     }
+
+    // Check for rate limit alerts from response headers
+    if (slack.isConfigured() && result.responseHeaders) {
+      checkSlackRateLimitAlert(result.responseHeaders);
+    }
   } catch (err) {
     console.error('refreshLimits failed', err);
   }
   limitsCheckedAt = Date.now();
+}
+
+function checkSlackThresholdAlerts(usageData) {
+  if (!usageData.daily_usage || !Array.isArray(usageData.daily_usage)) return;
+
+  for (const modelUsage of usageData.daily_usage) {
+    const { model, used, limit, resets_at } = modelUsage;
+    if (!limit || limit === 0) continue;
+
+    const usagePercent = Math.round((used / limit) * 100);
+    const resetKey = `${model}-${new Date().toDateString()}`;
+    const triggeredThresholds = slack.checkThreshold(usagePercent, resetKey);
+
+    for (const threshold of triggeredThresholds) {
+      console.log(`Slack alert: ${model} usage at ${usagePercent}% (threshold: ${threshold}%)`);
+      slack.sendUsageThresholdAlert({
+        usagePercent,
+        used,
+        limit,
+        resetAt: resets_at,
+        model,
+      }).catch((err) => console.error('Failed to send Slack threshold alert:', err));
+    }
+  }
+}
+
+function checkSlackRateLimitAlert(headers) {
+  const remaining = headers['anthropic-ratelimit-remaining'] || headers['x-ratelimit-remaining'];
+  const retryAfter = headers['retry-after'];
+
+  if (remaining === '0' || retryAfter) {
+    slack.sendRateLimitAlert({
+      model: headers['anthropic-ratelimit-model'] || 'Unknown',
+      retryAfter: retryAfter || 'N/A',
+      endpoint: 'claude.ai/usage',
+    }).catch((err) => console.error('Failed to send Slack rate limit alert:', err));
+  }
+}
+
+async function sendSlackDailySummary() {
+  if (!slack.isConfigured()) return;
+  if (!slack.shouldSendDailySummary()) return;
+
+  const today = new Date().toDateString();
+  if (lastDailySummaryDate === today) return;
+
+  lastDailySummaryDate = today;
+
+  const data = cache || (await getUsage());
+  if (!data) return;
+
+  // Calculate today's usage
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayData = data.byDate?.[todayStr] || {};
+
+  // Get top projects
+  const topProjects = Object.entries(data.byProject || {})
+    .map(([name, proj]) => ({
+      name,
+      tokens: (proj.inputTokens || 0) + (proj.outputTokens || 0),
+    }))
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, 5);
+
+  // Calculate plan usage percent
+  let planLimits = null;
+  if (limitsCache?.daily_usage?.[0]) {
+    const { used, limit } = limitsCache.daily_usage[0];
+    if (limit > 0) {
+      planLimits = { usagePercent: Math.round((used / limit) * 100) };
+    }
+  }
+
+  await slack.sendDailySummary({
+    usage: {
+      totalTokens: (data.totals?.inputTokens || 0) + (data.totals?.outputTokens || 0),
+      inputTokens: data.totals?.inputTokens || 0,
+      outputTokens: data.totals?.outputTokens || 0,
+      sessions: data.totals?.sessions || 0,
+    },
+    costs: { total: data.totals?.estimatedCost || 0 },
+    topProjects,
+    planLimits,
+  }).catch((err) => console.error('Failed to send Slack daily summary:', err));
 }
 
 async function getUsage() {
@@ -134,6 +232,38 @@ app.get('/api/usage/api', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── SLACK NOTIFICATIONS ────────────────────────────────────────────────────
+app.get('/api/slack/status', (_req, res) => {
+  res.json({
+    configured: slack.isConfigured(),
+    thresholds: slack.THRESHOLDS,
+    dailySummaryTime: slack.DAILY_SUMMARY_TIME,
+  });
+});
+
+app.post('/api/slack/test', async (_req, res) => {
+  if (!slack.isConfigured()) {
+    return res.status(400).json({ error: 'SLACK_WEBHOOK_URL not configured' });
+  }
+  const result = await slack.send({
+    text: ':white_check_mark: Claude Usage Monitor: Slack integration test successful!',
+  });
+  res.json(result);
+});
+
+app.post('/api/slack/send-summary', async (_req, res) => {
+  if (!slack.isConfigured()) {
+    return res.status(400).json({ error: 'SLACK_WEBHOOK_URL not configured' });
+  }
+  try {
+    lastDailySummaryDate = null; // Reset to allow sending
+    await sendSlackDailySummary();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -277,6 +407,9 @@ setInterval(() => broadcast('ping', { t: Date.now() }), 15_000);
 // Poll claude.ai/usage for real plan limit data
 setInterval(refreshLimits, LIMITS_POLL_MS);
 
+// Check for daily summary every minute
+setInterval(sendSlackDailySummary, 60_000);
+
 // Bind to 127.0.0.1 ONLY so nobody on the local network can read the
 // usage payload (which is sensitive — token counts, costs, session metadata).
 // Override with HOST=0.0.0.0 only if you know what you're doing.
@@ -284,6 +417,11 @@ const HOST = process.env.HOST || '127.0.0.1';
 app.listen(PORT, HOST, () => {
   console.log(`Claude Usage Monitor → http://${HOST}:${PORT}`);
   console.log(`Watching: ${PROJECTS_DIR}`);
+  if (slack.isConfigured()) {
+    console.log(`Slack notifications: enabled (thresholds: ${slack.THRESHOLDS.join(', ')}%, daily summary: ${slack.DAILY_SUMMARY_TIME})`);
+  } else {
+    console.log('Slack notifications: disabled (set SLACK_WEBHOOK_URL to enable)');
+  }
   refreshLimits().catch((e) => console.error('initial limits fetch failed', e));
   rebuild().catch((e) => console.error('initial build failed', e));
 });
